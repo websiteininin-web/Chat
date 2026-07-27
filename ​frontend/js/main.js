@@ -1,5 +1,5 @@
 // 1. Signaling Server se connect karna
-const socket = io("http://localhost:3000");
+const socket = io("https://chat-vx5l.onrender.com");
 
 // HTML ke Buttons aur Sections ko pakadna
 const createRoomBtn = document.getElementById('create-room-btn');
