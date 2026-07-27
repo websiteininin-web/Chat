@@ -39,10 +39,8 @@ async function initWebRTC() {
         dataChannel = peerConnection.createDataChannel("chat");
         setupDataChannel(dataChannel);
         
-        // Connection Offer banana
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
-        socket.emit('offer', offer, currentRoomId);
+        // FIX: Yahan se createOffer() hata diya gaya hai. 
+        // Ab offer tab jayega jab dost sach me join karega (niche dekhein).
     } else {
         peerConnection.ondatachannel = (event) => {
             dataChannel = event.channel;
@@ -61,6 +59,13 @@ async function initWebRTC() {
 // --- SIGNALING MESSAGES HANDLE KARNA ---
 socket.on('user-connected', async (userId) => {
     console.log("Friend joined!");
+    
+    // FIX: Jab dost join kar lega, tabhi Initiator offer banayega aur bhejega
+    if (isInitiator && peerConnection) {
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        socket.emit('offer', offer, currentRoomId);
+    }
 });
 
 socket.on('offer', async (offer) => {
@@ -88,35 +93,71 @@ socket.on('user-disconnected', () => {
     alert("Friend left the chat!");
 });
 
+
 // --- CHAT AUR FILE SEND KARNE KA LOGIC (ENCRYPTED) ---
 function setupDataChannel(channel) {
     channel.onmessage = async (event) => {
         try {
-            // Aate hi message ko decrypt (unlock) karna
-            const decryptedMsg = await decryptMessage(event.data, currentRoomId);
-            displayMessage("Friend", decryptedMsg);
+            // FIX: Incoming message ko JSON me parse karna taaki pata chale Text hai ya Image
+            const parsedData = JSON.parse(event.data);
+            const decryptedData = await decryptMessage(parsedData.data, currentRoomId);
+
+            if (parsedData.type === 'text') {
+                displayMessage("Friend", decryptedData);
+            } else if (parsedData.type === 'image') {
+                displayImage("Friend", decryptedData);
+            }
         } catch (error) {
-            console.error("Decryption fail ho gaya", error);
+            console.error("Data receive ya decrypt karne me error aaya", error);
         }
     };
 }
 
 document.getElementById('send-btn').addEventListener('click', async () => {
-    const input = document.getElementById('message-input');
-    const msg = input.value;
+    const textInput = document.getElementById('message-input');
+    const fileInput = document.getElementById('file-input');
     
-    if (msg && dataChannel && dataChannel.readyState === "open") {
-        // Bhejne se pehle message ko encrypt (lock) karna
-        const encryptedMsg = await encryptMessage(msg, currentRoomId);
+    const msg = textInput.value;
+    const file = fileInput.files[0];
+    
+    if (dataChannel && dataChannel.readyState === "open") {
         
-        dataChannel.send(encryptedMsg); // Hacker ko sirf lock message dikhega
-        displayMessage("You", msg); // Aapko screen par real text dikhega
-        input.value = "";
+        // 1. Text Message Bhejna
+        if (msg) {
+            const encryptedMsg = await encryptMessage(msg, currentRoomId);
+            // JSON format me bhejenge taaki receiver ko type pata chale
+            dataChannel.send(JSON.stringify({ type: 'text', data: encryptedMsg })); 
+            displayMessage("You", msg); 
+            textInput.value = "";
+        }
+
+        // 2. Image/File Bhejna (Naya Logic)
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const base64File = e.target.result;
+                
+                const encryptedFile = await encryptMessage(base64File, currentRoomId);
+                dataChannel.send(JSON.stringify({ type: 'image', data: encryptedFile }));
+                
+                displayImage("You", base64File); 
+            };
+            reader.readAsDataURL(file);
+            fileInput.value = ""; // Input clear kar dena
+        }
     }
 });
 
+// Text UI me dikhane ke liye
 function displayMessage(sender, message) {
     const box = document.getElementById('messages-box');
     box.innerHTML += `<p><b style="color: #58a6ff;">${sender}:</b> ${message}</p>`;
     box.scrollTop = box.scrollHeight; 
+}
+
+// Image UI me dikhane ke liye (Naya Function)
+function displayImage(sender, base64Image) {
+    const box = document.getElementById('messages-box');
+    box.innerHTML += `<p><b style="color: #58a6ff;">${sender} sent an image:</b><br><img src="${base64Image}" style="max-width: 250px; border-radius: 8px; margin-top: 8px; border: 1px solid #30363d;"></p>`;
+    box.scrollTop = box.scrollHeight;
 }
