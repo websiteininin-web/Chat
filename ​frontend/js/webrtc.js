@@ -113,3 +113,36 @@ function displayMessage(sender, message) {
     box.innerHTML += `<p><b style="color: #58a6ff;">${sender}:</b> ${message}</p>`;
     box.scrollTop = box.scrollHeight; // Auto-scroll
 }
+// --- CHAT AUR FILE SEND KARNE KA LOGIC (ENCRYPTED) ---
+function setupDataChannel(channel) {
+    channel.onmessage = async (event) => {
+        try {
+            // Aate hi message ko decrypt (unlock) karna
+            const decryptedMsg = await decryptMessage(event.data, currentRoomId);
+            displayMessage("Friend", decryptedMsg);
+        } catch (error) {
+            console.error("Decryption fail ho gaya", error);
+        }
+    };
+}
+
+document.getElementById('send-btn').addEventListener('click', async () => {
+    const input = document.getElementById('message-input');
+    const msg = input.value;
+    
+    if (msg && dataChannel && dataChannel.readyState === "open") {
+        // Bhejne se pehle message ko encrypt (lock) karna
+        const encryptedMsg = await encryptMessage(msg, currentRoomId);
+        
+        dataChannel.send(encryptedMsg); // Hacker ko sirf lock message dikhega
+        displayMessage("You", msg); // Aapko screen par real text dikhega
+        input.value = "";
+    }
+});
+
+function displayMessage(sender, message) {
+    const box = document.getElementById('messages-box');
+    box.innerHTML += `<p><b style="color: #58a6ff;">${sender}:</b> ${message}</p>`;
+    box.scrollTop = box.scrollHeight; 
+}
+
