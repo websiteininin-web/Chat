@@ -1,1 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anonymous P2P Chat</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h2>🔒 Secure P2P Room</h2>
+        
+        <!-- Room Link Generate Karne Ka Section -->
+        <div id="setup-section">
+            <button id="create-room-btn">Create Anonymous Room</button>
+            <p id="room-link-display"></p>
+        </div>
 
+        <!-- Video Call Section -->
+        <div id="video-section" style="display: none;">
+            <video id="local-video" autoplay muted playsinline></video>
+            <video id="remote-video" autoplay playsinline></video>
+        </div>
+
+        <!-- Chat & File Share Section -->
+        <div id="chat-section" style="display: none;">
+            <div id="messages-box"></div>
+            
+            <div class="input-area">
+                <!-- Image/GIF select karne ka button -->
+                <input type="file" id="file-input" accept="image/*, image/gif">
+                <!-- Text message type karne ka box -->
+                <input type="text" id="message-input" placeholder="Type a secret message...">
+                <button id="send-btn">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- WebSockets Library -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    
+    <!-- Custom JavaScript Files (Inhe hum aage banayenge) -->
+    <!-- <script src="js/crypto.js"></script> -->
+    <!-- <script src="js/webrtc.js"></script> -->
+    <!-- <script src="js/main.js"></script> -->
+</body>
+</html>
