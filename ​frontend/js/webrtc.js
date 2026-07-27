@@ -1,30 +1,47 @@
 let pc;
 let dataChannel;
 let localStream;
+let iceCandidateQueue = []; // 🟢 RACE CONDITION FIX: Rasta bacha kar rakhne ke liye!
 
+// 🟢 5 Google STUN Servers add kiye taaki Mobile Data par bhi easily connect ho
 const configuration = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' }
     ]
 };
 
-window.initWebRTC = function() {
+window.initWebRTC = async function() {
     pc = new RTCPeerConnection(configuration);
 
     if (isInitiator) {
+        // Creator channel banayega
         dataChannel = pc.createDataChannel('anonymous-chat');
         setupDataChannel(dataChannel);
+        
+        // 🟢 EXPLICIT OFFER: Ab hum connection ka wait nahi karenge, direct request bhejenge
+        try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            socket.emit('offer', pc.localDescription, currentRoomId);
+        } catch (err) {
+            console.error("Error creating initial offer:", err);
+        }
     } else {
+        // Joiner channel receive karega
         pc.ondatachannel = (event) => {
             dataChannel = event.channel;
             setupDataChannel(dataChannel);
         };
     }
 
+    // Video/Voice on karne ke liye backup logic
     pc.onnegotiationneeded = async () => {
         try {
-            if (pc.signalingState !== "stable") return; // Safety check
+            if (pc.signalingState !== "stable") return;
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
             socket.emit('offer', pc.localDescription, currentRoomId);
@@ -49,9 +66,15 @@ window.initWebRTC = function() {
 };
 
 socket.on('offer', async (offer) => {
-    if (!pc) initWebRTC();
+    if (!pc) await window.initWebRTC(); 
     try {
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        
+        // 🟢 Agar ICE candidates pehle aa gaye the, toh ab unhe set karo
+        while(iceCandidateQueue.length) {
+            await pc.addIceCandidate(new RTCIceCandidate(iceCandidateQueue.shift()));
+        }
+
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         socket.emit('answer', pc.localDescription, currentRoomId);
@@ -63,20 +86,29 @@ socket.on('offer', async (offer) => {
 socket.on('answer', async (answer) => {
     try {
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        
+        // 🟢 Queue System Check for Answer
+        while(iceCandidateQueue.length) {
+            await pc.addIceCandidate(new RTCIceCandidate(iceCandidateQueue.shift()));
+        }
     } catch (e) {
         console.error("Error handling answer:", e);
     }
 });
 
 socket.on('ice-candidate', async (candidate) => {
-    try {
-        if (pc) await pc.addIceCandidate(new RTCIceCandidate(candidate));
-    } catch (e) {
-        console.error('Error adding ICE candidate', e);
+    if (!pc || !pc.remoteDescription) {
+        // 🟢 RACE CONDITION FIX: Agar connection ready nahi hai, toh packet delete mat karo, queue me dalo!
+        iceCandidateQueue.push(candidate);
+    } else {
+        try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+            console.error('Error adding ICE candidate', e);
+        }
     }
 });
 
-// 🟢 JAB P2P CHANNEL SACH ME OPEN HOGA, TAB UI UNLOCK HOGA
 function setupDataChannel(channel) {
     channel.onopen = () => {
         console.log("Data Channel is OPEN!");
@@ -90,6 +122,7 @@ function setupDataChannel(channel) {
     };
 }
 
+// ---- MESSAGE & FILE SENDING LOGIC ----
 document.getElementById('send-btn').addEventListener('click', sendMessage);
 document.getElementById('message-input').addEventListener('keypress', (e) => {
     if (e.key === 'Enter') sendMessage();
@@ -122,21 +155,19 @@ document.getElementById('file-input').addEventListener('change', (event) => {
             if (window.saveMessageLocally) window.saveMessageLocally("You", payload);
         };
         reader.readAsDataURL(file);
-    } else if (!dataChannel || dataChannel.readyState !== "open") {
-        alert("⚠️ Connection not fully established yet. Please wait.");
     }
 });
 
+// ---- CAMERA / MIC PERMISSIONS ----
 document.getElementById('start-video-btn').addEventListener('click', async () => {
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         document.getElementById('local-video').srcObject = localStream;
         document.getElementById('video-section').style.display = "flex";
-        
         localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
         document.getElementById('start-video-btn').style.display = "none";
     } catch (err) {
-        alert("Camera/Mic permission denied! Please allow access in browser settings.");
+        alert("Camera/Mic permission denied!");
     }
 });
 
@@ -144,7 +175,6 @@ document.getElementById('start-voice-btn').addEventListener('click', async () =>
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
         document.getElementById('local-video').srcObject = localStream;
-        
         localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
         document.getElementById('start-voice-btn').style.display = "none";
     } catch (err) {
@@ -181,3 +211,4 @@ function displayMessage(sender, content, type, fileName = "") {
     box.appendChild(msgElement);
     box.scrollTop = box.scrollHeight; 
 }
+
