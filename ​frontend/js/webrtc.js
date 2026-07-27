@@ -1,163 +1,197 @@
-let peerConnection;
-let localStream;
-let dataChannel;
+// --- PREMIUM WEBRTC.JS (ON-DEMAND MEDIA & CHAT) ---
 
-// Google ke free STUN servers (Internet par ek dusre ko dhundhne ke liye)
-const servers = {
+let pc;
+let dataChannel;
+let localStream;
+
+// Google ke Free STUN Servers (Alag-alag network par connect karne ke liye)
+const configuration = {
     iceServers: [
-        { urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
     ]
 };
 
-async function initWebRTC() {
-    // 1. Camera aur Mic ka access lena
-    try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        document.getElementById('local-video').srcObject = localStream;
-    } catch (error) {
-        console.error("Camera/Mic access denied:", error);
-        alert("Please allow camera and mic access for the video call.");
-    }
+// 1. WebRTC Connection Initialize Karna (Ye main.js se call hoga)
+window.initWebRTC = function() {
+    pc = new RTCPeerConnection(configuration);
 
-    // 2. Direct P2P Connection banana
-    peerConnection = new RTCPeerConnection(servers);
-
-    // Apni video/audio dusre ko bhejna
-    if (localStream) {
-        localStream.getTracks().forEach(track => {
-            peerConnection.addTrack(track, localStream);
-        });
-    }
-
-    // 3. Dost ki video aane par screen par dikhana
-    peerConnection.ontrack = (event) => {
-        document.getElementById('remote-video').srcObject = event.streams[0];
-    };
-
-    // 4. Data Channel banana (Secure Chat aur Files bhejne ke liye)
+    // Agar hum initiator hain, toh Data Channel (Chat ke liye) banayenge
     if (isInitiator) {
-        dataChannel = peerConnection.createDataChannel("chat");
+        dataChannel = pc.createDataChannel('anonymous-chat');
         setupDataChannel(dataChannel);
-        
-        // FIX: Yahan se createOffer() hata diya gaya hai. 
-        // Ab offer tab jayega jab dost sach me join karega (niche dekhein).
     } else {
-        peerConnection.ondatachannel = (event) => {
+        // Dost ke side par Data Channel receive hoga
+        pc.ondatachannel = (event) => {
             dataChannel = event.channel;
             setupDataChannel(dataChannel);
         };
     }
 
-    // 5. Network path (ICE) milne par server ke through share karna
-    peerConnection.onicecandidate = (event) => {
+    // --- RENEGOTIATION MAGIC (For On-Demand Video/Audio) ---
+    pc.onnegotiationneeded = async () => {
+        try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            socket.emit('offer', pc.localDescription, currentRoomId);
+        } catch (err) {
+            console.error("Negotiation Error:", err);
+        }
+    };
+
+    // --- ICE CANDIDATES HANDLE KARNA ---
+    pc.onicecandidate = (event) => {
         if (event.candidate) {
             socket.emit('ice-candidate', event.candidate);
         }
     };
-}
 
-// --- SIGNALING MESSAGES HANDLE KARNA ---
-socket.on('user-connected', async (userId) => {
-    console.log("Friend joined!");
-    
-    // FIX: Jab dost join kar lega, tabhi Initiator offer banayega aur bhejega
-    if (isInitiator && peerConnection) {
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
-        socket.emit('offer', offer, currentRoomId);
-    }
-});
+    // --- REMOTE VIDEO/AUDIO RECEIVE KARNA ---
+    pc.ontrack = (event) => {
+        const remoteVideo = document.getElementById('remote-video');
+        document.getElementById('video-section').style.display = "flex";
+        if (!remoteVideo.srcObject) {
+            remoteVideo.srcObject = event.streams[0];
+        }
+    };
+};
 
+// 2. SIGNALING SERVER SE DATA RECEIVE KARNA
 socket.on('offer', async (offer) => {
-    if (!peerConnection) await initWebRTC();
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
-    socket.emit('answer', answer, currentRoomId);
+    if (!pc) initWebRTC();
+    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    socket.emit('answer', pc.localDescription, currentRoomId);
 });
 
 socket.on('answer', async (answer) => {
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+    await pc.setRemoteDescription(new RTCSessionDescription(answer));
 });
 
 socket.on('ice-candidate', async (candidate) => {
     try {
-        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (e) {
-        console.error('Error adding received ice candidate', e);
+        console.error('Error adding ICE candidate', e);
     }
 });
 
-socket.on('user-disconnected', () => {
-    document.getElementById('remote-video').srcObject = null;
-    alert("Friend left the chat!");
+// ---------------------------------------------------------
+// 3. ON-DEMAND CAMERA & MIC PERMISSIONS
+// ---------------------------------------------------------
+document.getElementById('start-video-btn').addEventListener('click', async () => {
+    try {
+        // Tabhi permission mangega jab ye button click hoga
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        document.getElementById('local-video').srcObject = localStream;
+        document.getElementById('video-section').style.display = "flex";
+        
+        // Tracks ko connection me add karo (Ye automatic samne wale ko video bhej dega)
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+        document.getElementById('start-video-btn').disabled = true;
+    } catch (err) {
+        alert("Camera/Mic permission denied! Please allow access.");
+    }
 });
 
+document.getElementById('start-voice-btn').addEventListener('click', async () => {
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+        document.getElementById('local-video').srcObject = localStream;
+        
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+        document.getElementById('start-voice-btn').disabled = true;
+    } catch (err) {
+        alert("Mic permission denied!");
+    }
+});
 
-// --- CHAT AUR FILE SEND KARNE KA LOGIC (ENCRYPTED) ---
+// ---------------------------------------------------------
+// 4. DATA CHANNEL (CHAT & FILE SHARING FIX)
+// ---------------------------------------------------------
 function setupDataChannel(channel) {
-    channel.onmessage = async (event) => {
-        try {
-            // FIX: Incoming message ko JSON me parse karna taaki pata chale Text hai ya Image
-            const parsedData = JSON.parse(event.data);
-            const decryptedData = await decryptMessage(parsedData.data, currentRoomId);
-
-            if (parsedData.type === 'text') {
-                displayMessage("Friend", decryptedData);
-            } else if (parsedData.type === 'image') {
-                displayImage("Friend", decryptedData);
-            }
-        } catch (error) {
-            console.error("Data receive ya decrypt karne me error aaya", error);
-        }
+    channel.onopen = () => console.log("Data Channel is OPEN!");
+    
+    channel.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        displayMessage("Peer", data.content, data.type);
+        
+        // Agar backup on hai toh save karo
+        if (window.saveMessageLocally) window.saveMessageLocally("Peer", data);
     };
 }
 
-document.getElementById('send-btn').addEventListener('click', async () => {
-    const textInput = document.getElementById('message-input');
-    const fileInput = document.getElementById('file-input');
-    
-    const msg = textInput.value;
-    const file = fileInput.files[0];
-    
-    if (dataChannel && dataChannel.readyState === "open") {
-        
-        // 1. Text Message Bhejna
-        if (msg) {
-            const encryptedMsg = await encryptMessage(msg, currentRoomId);
-            // JSON format me bhejenge taaki receiver ko type pata chale
-            dataChannel.send(JSON.stringify({ type: 'text', data: encryptedMsg })); 
-            displayMessage("You", msg); 
-            textInput.value = "";
-        }
+// Message bhejne ka logic
+document.getElementById('send-btn').addEventListener('click', sendMessage);
+document.getElementById('message-input').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') sendMessage();
+});
 
-        // 2. Image/File Bhejna (Naya Logic)
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                const base64File = e.target.result;
-                
-                const encryptedFile = await encryptMessage(base64File, currentRoomId);
-                dataChannel.send(JSON.stringify({ type: 'image', data: encryptedFile }));
-                
-                displayImage("You", base64File); 
-            };
-            reader.readAsDataURL(file);
-            fileInput.value = ""; // Input clear kar dena
-        }
+function sendMessage() {
+    const input = document.getElementById('message-input');
+    const msg = input.value.trim();
+    
+    if (msg && dataChannel && dataChannel.readyState === "open") {
+        const payload = { type: 'text', content: msg };
+        
+        // Data channel ke through bhejo
+        dataChannel.send(JSON.stringify(payload));
+        displayMessage("You", msg, "text");
+        
+        if (window.saveMessageLocally) window.saveMessageLocally("You", payload);
+        input.value = "";
+    }
+}
+
+// File bhejne ka logic (Storage access without extra permissions)
+document.getElementById('file-input').addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (file && dataChannel && dataChannel.readyState === "open") {
+        const reader = new FileReader();
+        
+        // File ko Base64 URL me convert karke bhej rahe hain
+        reader.onload = (e) => {
+            const fileData = e.target.result;
+            const payload = { type: 'file', content: fileData, fileName: file.name };
+            
+            dataChannel.send(JSON.stringify(payload));
+            displayMessage("You", fileData, "file", file.name);
+            
+            if (window.saveMessageLocally) window.saveMessageLocally("You", payload);
+        };
+        reader.readAsDataURL(file);
     }
 });
 
-// Text UI me dikhane ke liye
-function displayMessage(sender, message) {
+// UI me message dikhane ka function
+function displayMessage(sender, content, type, fileName = "") {
     const box = document.getElementById('messages-box');
-    box.innerHTML += `<p><b style="color: #58a6ff;">${sender}:</b> ${message}</p>`;
-    box.scrollTop = box.scrollHeight; 
+    const msgElement = document.createElement('div');
+    msgElement.style.margin = "10px 0";
+    msgElement.style.padding = "10px";
+    msgElement.style.borderRadius = "8px";
+    msgElement.style.maxWidth = "80%";
+    
+    if (sender === "You") {
+        msgElement.style.background = "#005c4b";
+        msgElement.style.marginLeft = "auto"; // Right side align
+    } else {
+        msgElement.style.background = "#202c33";
+    }
+
+    if (type === "text") {
+        msgElement.innerHTML = `<strong>${sender}:</strong> ${content}`;
+    } else if (type === "file") {
+        // Agar Image hai toh render karo, warna Download link do
+        if (content.startsWith('data:image')) {
+            msgElement.innerHTML = `<strong>${sender}:</strong><br><img src="${content}" style="max-width: 100%; border-radius: 5px; margin-top: 5px;">`;
+        } else {
+            msgElement.innerHTML = `<strong>${sender} sent a file:</strong><br><a href="${content}" download="${fileName}" style="color: #4dabf7;">💾 Download ${fileName}</a>`;
+        }
+    }
+    
+    box.appendChild(msgElement);
+    box.scrollTop = box.scrollHeight; // Auto-scroll to bottom
 }
 
-// Image UI me dikhane ke liye (Naya Function)
-function displayImage(sender, base64Image) {
-    const box = document.getElementById('messages-box');
-    box.innerHTML += `<p><b style="color: #58a6ff;">${sender} sent an image:</b><br><img src="${base64Image}" style="max-width: 250px; border-radius: 8px; margin-top: 8px; border: 1px solid #30363d;"></p>`;
-    box.scrollTop = box.scrollHeight;
-}
