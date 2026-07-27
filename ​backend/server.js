@@ -1,9 +1,13 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
+
+// Frontend files ko serve karne ke liye (Kyunki frontend folder root me hai)
+app.use(express.static(path.join(__dirname, '../frontend')));
 
 // CORS configuration
 const io = new Server(server, {
