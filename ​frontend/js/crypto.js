@@ -1,6 +1,6 @@
 // Web Crypto API - AES-GCM (Military-Grade Encryption)
 
-// 1. Text ko code me badalna (ArrayBuffer)
+// 1. Text/Data ko code me badalna (ArrayBuffer)
 function enc(str) {
     return new TextEncoder().encode(str);
 }
@@ -51,8 +51,14 @@ async function encryptMessage(message, roomId) {
     combined.set(iv, 0);
     combined.set(new Uint8Array(ciphertext), iv.length);
 
+    // FIX: Badi files (Images) ke liye Maximum Call Stack Crash rokne ke liye loop ka use kiya hai
+    let binaryString = "";
+    for (let i = 0; i < combined.length; i++) {
+        binaryString += String.fromCharCode(combined[i]);
+    }
+    
     // Bhejne ke liye Base64 format me convert karna
-    return btoa(String.fromCharCode.apply(null, combined));
+    return btoa(binaryString);
 }
 
 // 5. Message Aane ke Baad Unlock (Decrypt) karna
