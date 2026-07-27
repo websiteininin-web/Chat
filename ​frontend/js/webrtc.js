@@ -88,31 +88,6 @@ socket.on('user-disconnected', () => {
     alert("Friend left the chat!");
 });
 
-// --- CHAT AUR FILE SEND KARNE KA LOGIC ---
-function setupDataChannel(channel) {
-    channel.onmessage = (event) => {
-        displayMessage("Friend", event.data);
-    };
-}
-
-document.getElementById('send-btn').addEventListener('click', () => {
-    const input = document.getElementById('message-input');
-    const msg = input.value;
-    
-    // Agar text hai aur connection open hai toh bhej do
-    if (msg && dataChannel && dataChannel.readyState === "open") {
-        dataChannel.send(msg);
-        displayMessage("You", msg);
-        input.value = "";
-    }
-});
-
-// Screen par message dikhane wala function
-function displayMessage(sender, message) {
-    const box = document.getElementById('messages-box');
-    box.innerHTML += `<p><b style="color: #58a6ff;">${sender}:</b> ${message}</p>`;
-    box.scrollTop = box.scrollHeight; // Auto-scroll
-}
 // --- CHAT AUR FILE SEND KARNE KA LOGIC (ENCRYPTED) ---
 function setupDataChannel(channel) {
     channel.onmessage = async (event) => {
@@ -145,4 +120,3 @@ function displayMessage(sender, message) {
     box.innerHTML += `<p><b style="color: #58a6ff;">${sender}:</b> ${message}</p>`;
     box.scrollTop = box.scrollHeight; 
 }
-
