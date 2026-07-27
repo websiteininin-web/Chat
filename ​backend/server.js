@@ -1,4 +1,4 @@
-const express = require('express');
+const express = require('express'); // 'Const' ki jagah 'const' aayega
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
@@ -6,8 +6,16 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 
-// Frontend files ko serve karne ke liye (Kyunki frontend folder root me hai)
-app.use(express.static(path.join(__dirname, '../frontend')));
+// Frontend folder ka rasta (path)
+const frontendPath = path.join(__dirname, '../frontend');
+
+// 1. CSS/JS files ko load karne ke liye
+app.use(express.static(frontendPath));
+
+// 2. ERROR FIX: Agar koi URL khule, toh direct index.html bhej do (Cannot GET / error solved)
+app.get('*', (req, res) => {
+    res.sendFile(path.join(frontendPath, 'index.html'));
+});
 
 // CORS configuration
 const io = new Server(server, {
@@ -29,7 +37,6 @@ io.on('connection', (socket) => {
 
     // 2. Saare listeners ab join-room ke bahar hain (Duplicate Events ka issue khatam)
     socket.on('offer', (offer, targetId) => {
-        // targetId yahan client ka bheja hua currentRoomId hai
         socket.to(targetId).emit('offer', offer);
     });
 
@@ -38,7 +45,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('ice-candidate', (candidate) => {
-        // Client side se roomId nahi aa raha tha, isliye saved socket.roomId use kiya
         if (socket.roomId) {
             socket.to(socket.roomId).emit('ice-candidate', candidate);
         }
@@ -51,7 +57,7 @@ io.on('connection', (socket) => {
     });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
     console.log(`P2P Signaling Server is running on port ${PORT}`);
 });
