@@ -1,20 +1,45 @@
-const express = require('express'); // 'Const' ki jagah 'const' aayega
+const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const fs = require('fs'); // NAYA: File system module files check karne ke liye
 
 const app = express();
 const server = http.createServer(app);
 
-// Frontend folder ka rasta (path)
-const frontendPath = path.join(__dirname, '../frontend');
+// --- SMART DETECTIVE LOGIC ---
+let frontendPath = path.join(__dirname, '../frontend');
 
-// 1. CSS/JS files ko load karne ke liye
+// 1. Agar folder ka naam 'Frontend' (Capital F) hai, toh auto-fix karo
+if (!fs.existsSync(frontendPath) && fs.existsSync(path.join(__dirname, '../Frontend'))) {
+    frontendPath = path.join(__dirname, '../Frontend');
+}
+
 app.use(express.static(frontendPath));
 
-// 2. ERROR FIX: Agar koi URL khule, toh direct index.html bhej do (Cannot GET / error solved)
 app.get('*', (req, res) => {
-    res.sendFile(path.join(frontendPath, 'index.html'));
+    // 2. Agar frontend folder sach me missing hai
+    if (!fs.existsSync(frontendPath)) {
+        return res.send(`<h2 style="color:red;">Error 404: 'frontend' folder server par nahi mila!</h2>`);
+    }
+
+    const indexPath = path.join(frontendPath, 'index.html');
+    
+    // 3. Agar index.html bilkul sahi jagah par hai, toh website kholo
+    if (fs.existsSync(indexPath)) {
+        return res.sendFile(indexPath);
+    } 
+    
+    // 4. BRAHMASTRA: Agar file ka naam galat hai, toh asli files screen par dikha do!
+    const files = fs.readdirSync(frontendPath).join(', ');
+    res.send(`
+        <div style="font-family: sans-serif; padding: 20px;">
+            <h2 style="color: orange;">⚠️ Almost Done! Lekin 'index.html' nahi mili!</h2>
+            <p>Aapke frontend folder ke andar Render ko yeh files mili hain:</p>
+            <h3 style="color: blue;">[ ${files} ]</h3>
+            <p>Upar likhe hue naam dhyan se dekhein. Agar file ka naam 'Index.html' ya 'chat.html' hai, toh kripya GitHub par usko rename karke exactly <b>index.html</b> (sab small) kar dein.</p>
+        </div>
+    `);
 });
 
 // CORS configuration
@@ -25,17 +50,14 @@ const io = new Server(server, {
     }
 });
 
-// Strict Zero-Logging & P2P Signaling Logic (Memory Leak Fixed)
+// Strict Zero-Logging & P2P Signaling Logic
 io.on('connection', (socket) => {
-    
-    // 1. Room join karne par socket object me roomId save kar liya
     socket.on('join-room', (roomId, userId) => {
         socket.roomId = roomId; 
         socket.join(roomId);
         socket.to(roomId).emit('user-connected', userId);
     });
 
-    // 2. Saare listeners ab join-room ke bahar hain (Duplicate Events ka issue khatam)
     socket.on('offer', (offer, targetId) => {
         socket.to(targetId).emit('offer', offer);
     });
