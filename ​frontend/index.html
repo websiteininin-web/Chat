@@ -3,35 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Anonymous P2P Chat</title>
+    <title>Premium Anonymous P2P Chat</title>
+    <!-- FontAwesome Library for Premium Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
-        <h2>🔒 Secure P2P Room</h2>
+        <h2><i class="fa-solid fa-user-secret"></i> Secure P2P Room</h2>
         
-        <!-- Room Link Generate Karne Ka Section -->
-        <div id="setup-section">
-            <button id="create-room-btn">Create Anonymous Room</button>
-            <p id="room-link-display"></p>
+        <!-- Connection Status Indicator -->
+        <div id="connection-status" style="display: none; text-align: center; margin-bottom: 15px;">
+            <span id="status-icon" style="color: orange;"><i class="fa-solid fa-circle-notch fa-spin"></i></span>
+            <span id="status-text">Waiting for friend to connect...</span>
         </div>
 
-        <!-- Video Call Section -->
-        <div id="video-section" style="display: none;">
-            <video id="local-video" autoplay muted playsinline></video>
-            <video id="remote-video" autoplay playsinline></video>
+        <!-- Privacy & Storage Toggle -->
+        <div class="privacy-toggle" style="text-align: center; margin-bottom: 15px;">
+            <label style="cursor: pointer; font-size: 14px;">
+                <input type="checkbox" id="save-chat-toggle"> 
+                <i class="fa-solid fa-hard-drive"></i> Save Chat Locally (Uncheck for 1000% Anonymous)
+            </label>
+        </div>
+
+        <!-- Setup Section (Generate Link & Password) -->
+        <div id="setup-section">
+            <button id="create-room-btn"><i class="fa-solid fa-link"></i> Create Anonymous Room</button>
+            
+            <div id="room-info" style="display: none; margin-top: 15px; background: #222; padding: 10px; border-radius: 8px;">
+                <p>Send this link to your friend:</p>
+                <b id="room-link-display" style="word-wrap: break-word; color: #4dabf7;"></b>
+                <p style="margin-top:10px; color: #ffeb3b;">Room Password: <b id="room-password-display" style="letter-spacing: 2px;"></b></p>
+            </div>
+        </div>
+
+        <!-- Join Room Section (For the friend who opens the link) -->
+        <div id="join-section" style="display: none;">
+            <p>You have been invited to a secure room.</p>
+            <input type="text" id="join-password" placeholder="Enter Room Password" style="padding: 10px; border-radius: 5px;">
+            <button id="join-room-btn" style="margin-top: 10px;"><i class="fa-solid fa-right-to-bracket"></i> Join Room</button>
+        </div>
+
+        <!-- Video & Voice Call Buttons (ON-DEMAND CAMERA/MIC) -->
+        <div id="media-controls" style="display: none; text-align: center; margin-top: 15px;">
+            <button id="start-voice-btn" style="background: #28a745;"><i class="fa-solid fa-phone"></i> Start Voice Call</button>
+            <button id="start-video-btn" style="background: #007bff;"><i class="fa-solid fa-video"></i> Start Video Call</button>
+        </div>
+
+        <!-- Video Display Section -->
+        <div id="video-section" style="display: none; margin-top: 15px; justify-content: center; gap: 10px;">
+            <video id="local-video" autoplay muted playsinline style="width: 45%; border-radius: 8px; border: 2px solid #555;"></video>
+            <video id="remote-video" autoplay playsinline style="width: 45%; border-radius: 8px; border: 2px solid #555;"></video>
         </div>
 
         <!-- Chat & File Share Section -->
-        <div id="chat-section" style="display: none;">
-            <div id="messages-box"></div>
+        <div id="chat-section" style="display: none; margin-top: 20px;">
+            <div id="messages-box" style="height: 250px; overflow-y: scroll; border: 1px solid #444; padding: 10px; border-radius: 8px; margin-bottom: 10px; background: #1a1a1a;"></div>
             
-            <div class="input-area">
-                <!-- Image/GIF select karne ka button -->
-                <input type="file" id="file-input" accept="image/*, image/gif">
-                <!-- Text message type karne ka box -->
-                <input type="text" id="message-input" placeholder="Type a secret message...">
-                <button id="send-btn">Send</button>
+            <div class="input-area" style="display: flex; gap: 10px;">
+                <!-- Hidden File Input (Browser will handle storage access safely) -->
+                <input type="file" id="file-input" accept="*/*" style="display: none;">
+                
+                <!-- Premium Clip Icon for File Upload -->
+                <label for="file-input" style="cursor: pointer; padding: 12px; background: #444; color: white; border-radius: 5px;" title="Send File">
+                    <i class="fa-solid fa-paperclip"></i>
+                </label>
+                
+                <input type="text" id="message-input" placeholder="Type a secret message..." style="flex: 1; padding: 10px; border-radius: 5px; border: 1px solid #555; background: #333; color: white;">
+                
+                <!-- Premium Send Icon -->
+                <button id="send-btn" style="padding: 10px 15px; border-radius: 5px; background: #28a745;"><i class="fa-solid fa-paper-plane"></i></button>
             </div>
         </div>
     </div>
